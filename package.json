@@ -1,0 +1,57 @@
+{
+  "name": "dsh-sci-viz",
+  "version": "3.1.0",
+  "description": "DSH 科研可视化工作台：蛋白质三维结构 + 统计图表 + 基因组学绘图，直接画在对话旁边。零依赖，装上即用。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "deepseek-harness",
+    "science",
+    "scientific-visualization",
+    "bioinformatics",
+    "protein-structure",
+    "statistics",
+    "research"
+  ],
+  "license": "MIT",
+  "author": "Astepluver",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Astepluver/dsh-sci-viz.git"
+  },
+  "homepage": "https://github.com/Astepluver/dsh-sci-viz#readme",
+  "bugs": {
+    "url": "https://github.com/Astepluver/dsh-sci-viz/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "data",
+    "tools",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "THIRD-PARTY.md",
+    "功能清单.md"
+  ],
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.1.5-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  }
+}

@@ -1,0 +1,47 @@
+# dsh-sci-viz bundle patch
+#
+# 往 desktop profile 的插件树里插一行。这一行同时挂起两半：
+#   · 宿主半边 lib/index.js —— /api/sci-viz 路由 + 5 个模型可调用工具 + 验证规程
+#   · 浏览器半边 lib/client.js —— 侧边栏「科研可视化」面板（主面板 + 隐形 watcher）
+#
+# 下面的 config 会被 Object.assign 覆盖到 lib/index.js 的 DEFAULTS 上，
+# 因此只写想改的项即可；删掉某项就回到代码里的默认值。
+- insert:
+    - id: sci-viz
+      name: 'dsh-sci-viz'
+      config:
+        # ── 技能来源 ──────────────────────────────────────────────────
+        # 主要来源是插件自带的 data/skill-pack.json.gz：195 个技能的完整正文，
+        # 挂载时全部注册进 DSH 技能系统，所以**分享给别人时这两行可以整段删掉**，
+        # 对方照样能直接用全部技能。
+        #
+        # 这里配的两个目录只起两个作用：
+        #   1. 你自己后续往里丢新技能 —— 会以「本地」徽章出现在技能库里；
+        #   2. 本机正好有源目录时，技能详情能读到 scripts/references 等附属资源
+        #      （附属资源合计约 59 MB，没有随包分发）。
+        # 换机器 / 目录不存在：删掉或改路径即可，不报错也不降级。
+        # ── 公开分发版：这里刻意不配 skillsDirs / structureRoots / stateDir ──────
+        # 理由：它们在开发机上是绝对路径，写进公开仓库既泄露路径、换台机器又必然失效；
+        # 而 DSH 不会把 "<插件目录>" 这类占位符替换成真路径，占位符会当字符串直接覆盖默认值
+        # （stateDir 会变成相对当前目录的路径，Windows 下含 < > 连 mkdir 都失败）。
+        # 删掉这三个键即回到 lib/index.js 的 DEFAULTS：
+        #   stateDir = 插件目录/state（装到哪写到哪，自动可迁移）
+        #   skillsDirs = []（技能正文全部来自包内 data/skill-pack.json.gz，不需要本地目录）
+        #   structureRoots = []（相对路径按进程工作目录解析）
+        # 想接自己的技能目录，请在自己的 profile 配置里加，不要改这个文件。
+        # ── 验证规程（插件自带，分享出去对方也有）──────────────────────────
+        # 挂一段系统提示 + 一道子代理守卫：
+        #   · 根会话拿到「四层验证规程」（通道自检 / 契约层 / 数值对拍 / 几何与视觉）；
+        #   · 子代理拿到短指令，且只允许写 <会话 cwd>/.dsh-verify/；
+        #   · Agent Teams 队友自动豁免，不影响其落盘。
+        # 跟着插件走，不需要别的插件来探测它；任何一项都能单独关掉。
+        verifyProtocol:
+          enabled: true
+          sectionOrder: 750                 # PLAN_POLICY(500)/TEAM_POLICY(600) 之后、PTC_ONLY(800) 之前
+          verifyScratchDir: '.dsh-verify'   # 相对会话 cwd，天然可迁移
+          subagentReadOnly: true
+          allowScratchWrites: true
+          deniedTools:
+            - write
+            - edit
+          denyShell: false                  # 拦了 shell 子代理就跑不了对拍脚本，验证会变弱
