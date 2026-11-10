@@ -56,7 +56,9 @@ const RUNTIME = ['lib/index.js', 'lib/client.js', 'lib/core/numeric.js', 'lib/co
   'lib/verify-protocol.js', 'data/taxonomy.json', 'data/skill-pack.json.gz']
 const sum = (files) => files.reduce((a, f) => a + statSync(join(P, f)).size, 0)
 const runtimeKB = sum(RUNTIME) / 1024
-chk(runtimeKB < 1536, `运行时文件合计 ${runtimeKB.toFixed(0)} KB（技能正文 2.3 MB 压到 0.85 MB 后的规模）`)
+// 2026-10-15：新增 14 个 WGS 技能（技能库 195 → 222 个，正文 2.3 → 2.6 MB，包 0.85 → 0.99 MB），
+// 运行时体积预算从 1536 KB 提到 2048 KB。仍是「零依赖、零构建」的轻量插件。
+chk(runtimeKB < 2048, `运行时文件合计 ${runtimeKB.toFixed(0)} KB（技能正文 2.6 MB 压到约 0.99 MB 后的规模）`)
 const total = walk(P).filter((f) => !f.includes('\\state\\')).reduce((a, f) => a + statSync(f).size, 0) / 1024
 console.log(`        运行时明细：${RUNTIME.map((f) => `${f.split(/[\\/]/).pop()} ${(statSync(join(P, f)).size / 1024).toFixed(0)}KB`).join(' / ')}`)
 console.log(`        含验证脚本 ${total.toFixed(0)} KB；state/current.json 另行占用（只有一个文件、每次覆盖）`)

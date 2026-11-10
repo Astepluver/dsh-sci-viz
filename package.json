@@ -1,6 +1,6 @@
 {
   "name": "dsh-sci-viz",
-  "version": "3.1.0",
+  "version": "3.1.2",
   "description": "DSH 科研可视化工作台：蛋白质三维结构 + 统计图表 + 基因组学绘图，直接画在对话旁边。零依赖，装上即用。",
   "keywords": [
     "dsh",

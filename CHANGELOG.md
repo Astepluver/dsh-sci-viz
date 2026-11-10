@@ -2,6 +2,19 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 3.1.2 — 2026-10-27
+
+从「书生·端砚 InkStone」SCP 广场引入 4 个医学技能（InkVell Inc. / MIT，自包含、无远程依赖）：
+`clinical-imaging`（影像定量：ADC 图、微 CT 骨形态）、`bioimage-analysis`（显微图像分割与追踪）、
+`immunology-assays`（ELISA 4PL、免疫组化 H-score、ATAC-seq）、`cancer-genomics-analysis`（体细胞突变、CNV、TMB）。
+正文一字未改，仅追加来源字段与署名段；提示词与工具无变更。技能库 222 → 226。
+
+## 3.1.1 — 2026-10-18
+
+不加功能，只把过期事实改对：测试台技能数改为**从技能包推导**（14 项误报归零）；
+修 `stats.contentBytes` 的单位错误（UTF-16 码元数 → UTF-8 字节，少算 45,623 B）；
+修 `localTool` 把描述 getter 冻成字符串的拷贝 bug；构建脚本增加目录回退与空包中止护栏。
+
 ## 3.1.0 — 2026-10-12
 
 这一版加的是**保险**，不是新图型。

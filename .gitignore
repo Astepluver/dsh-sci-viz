@@ -1,0 +1,12 @@
+# 运行期数据：每次覆盖，不进仓库
+state/
+# 开发临时文件
+.tmp/
+# 打包产物
+dist/
+# 依赖
+node_modules/
+__pycache__/
+*.pyc
+# 内部进度笔记（含开发机路径）
+tools/_progress.md

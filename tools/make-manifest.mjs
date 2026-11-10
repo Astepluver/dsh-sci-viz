@@ -7,6 +7,7 @@
  * 用法：node tools/make-manifest.mjs
  */
 import { writeFileSync, readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -25,6 +26,14 @@ const fakeCtx = {
 const host = await import(`file://${join(PLUGIN, 'lib', 'index.js').replace(/\\/g, '/')}`)
 host.apply(fakeCtx, {})
 await new Promise((r) => setTimeout(r, 400))
+/**
+ * 技能库工具的描述是 getter，要等目录加载完才说得出真实条数与分类。
+ * 它自己提供了 `whenReady()`，这里就**等它**，不要靠 setTimeout 猜 ——
+ * 猜短了，清单里就会印上兜底文案（真发生过：生成出来的工具说明缺条数与分类清单）。
+ */
+for (const def of tools.values()) {
+  if (typeof def.whenReady === 'function') { try { await def.whenReady() } catch { /* 用兜底文案 */ } }
+}
 
 /** JSON Schema → 人话类型。 */
 function typeOf(schema) {
@@ -67,6 +76,21 @@ function toolSection(def) {
 }
 
 const taxonomy = JSON.parse(readFileSync(join(PLUGIN, 'data', 'taxonomy.json'), 'utf8'))
+/**
+ * 技能数与技能包体积从**包里现读**，不写死。
+ * 这里原本写的是 `taxonomy.snapshot?.onDisk ?? 195` —— taxonomy.json 是 2026-10-04 的快照，
+ * 技能包 10-16 重建到 222 个之后，这份清单就一直印着 195（还真印出去过）。
+ */
+const PACK_PATH = join(PLUGIN, 'data', 'skill-pack.json.gz')
+const packStats = (() => {
+  try {
+    const p = JSON.parse(gunzipSync(readFileSync(PACK_PATH)).toString('utf8'))
+    return { skills: p.skills?.length ?? 0, bytes: readFileSync(PACK_PATH).length }
+  } catch {
+    return { skills: 0, bytes: 0 }
+  }
+})()
+const packMB = packStats.bytes ? (packStats.bytes / 1024 / 1024).toFixed(2) : '—'
 const cats = (taxonomy.categories ?? []).map((c) => {
   const n = Object.values(taxonomy.skills).filter((s) => s.cat === c.id).length
   return `${c.zh} ${n}`
@@ -247,8 +271,8 @@ KM 的中位生存期/事件数/删失数完全一致，log-rank 的 χ² 相对
 
 ## 六、技能库（技能库标签页）—— 分享出去就能用
 
-- **${taxonomy.snapshot?.onDisk ?? 195} 个技能随插件一起分发**，含完整 SKILL.md 正文
-  （打包在 \`data/skill-pack.json.gz\`，约 0.85 MB）
+- **${packStats.skills} 个技能随插件一起分发**，含完整 SKILL.md 正文
+  （打包在 \`data/skill-pack.json.gz\`，约 ${packMB} MB）
 - **插件挂载时把它们全部注册进 DSH 的技能系统**（\`ctx.skills.register\`，\`source: 'bundled'\`），
   所以对方装上插件就能直接调用其中任何一个 —— 不需要本地技能目录，也不需要额外配置
 - 徽章「自带」= 插件带的；「本地」= 本机技能目录里额外加的（你自己后来丢进去的会出现在这里）
@@ -257,7 +281,7 @@ KM 的中位生存期/事件数/删失数完全一致，log-rank 的 χ² 相对
 - 点开看标题、中文说明、正文、体积、本机源目录路径（若有），以及一键复制：
   \`复制路径\` · \`复制说明\` · \`让 AI 用它\`
 
-**附属资源**：\`scripts/\` \`references/\` \`assets/\` 合计约 59 MB，没有打进包。每个技能的正文里
+**附属资源**：\`scripts/\` \`references/\` \`assets/\` 按技能包里 \`resources\` 字段列出的文件逐个实测求和，合计约 47 MB，没有打进包。每个技能的正文里
 写明了它期望哪些文件；本机若正好有源目录，详情里会给出路径，可以直接去取。
 
 **自己加技能**：把技能目录丢进 \`skillsDirs\` 指向的位置，它会以「本地」徽章出现在清单里，

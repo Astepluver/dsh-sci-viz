@@ -3,38 +3,102 @@
 一个 DSH 插件，把三件事放进同一个面板：**蛋白质三维结构**、**统计图表**、**技能库浏览器**。
 目的很直白：不要再让 AI 用文字描述「一个由 964 个残基组成的细长螺旋束」，直接看图。
 
-- **随取随用**：**195 个技能随插件一起分发**（`data/skill-pack.json.gz`，含完整 SKILL.md 正文），
+- **随取随用**：**226 个技能随插件一起分发**（`data/skill-pack.json.gz`，含完整 SKILL.md 正文），
   挂载时全部注册进 DSH 技能系统 —— 对方装上就能直接调用，**不需要任何本地技能目录**。
 - **零依赖**：宿主半边只用 `node:` 内置模块，浏览器半边只 require 平台自带的 `react`。
 - **零构建**：没有打包步骤，改完 `lib/*.js` 刷新页面即生效。
-- **体积**：运行时读的文件合计约 **1.2 MB**（其中技能包 0.84 MB）。见「八、体积」。
+- **体积**：运行时读的文件合计约 **1.55 MB**（其中技能包 1.0 MB）。见「八、体积」。
 
 ---
 
-## 零、怎么装
+## 零、怎么装（拿到包的人看这里）
+
+DSH 的插件安装框只认四种规格：**npm 包名** · **GitHub 仓库地址** · **本地绝对目录路径** ·
+**.tgz / .tar.gz 直链**。**zip 不在其中** —— 所以这里给的是 `.tgz`：
 
 ```
-1. 打开 DSH → 设置 → 插件
-2. 在安装框里粘贴这一行：
-   https://github.com/Astepluver/dsh-sci-viz/releases/latest/download/dsh-sci-viz.tgz
-3. 等它装完，重启一次 DSH
-4. 刷新页面，右下角会出现一枚可拖动的图标，点它打开面板
+1. DSH → 设置 → 插件，在安装框里粘贴包名 `dsh-sci-viz`
+   （或 Release 直链：https://github.com/Astepluver/dsh-sci-viz/releases/latest/download/dsh-sci-viz.tgz）
+2. 等它装完（列表里会出现 dsh-sci-viz 3.1.2）
+3. 重启一次 DSH
+4. 刷新页面，右下角会出现一枚可拖动的 🔬 药丸 —— 点它打开面板
 ```
 
-也可以下载 `.tgz` 后在安装框里填本地绝对路径。注意安装框不认 zip 文件本身的路径 ——
-要先解压，再指向**解压出来的目录**。
+（Release 页面：`https://github.com/Astepluver/dsh-sci-viz/releases/tag/v3.1.2`。
+直链只在 Release 建好之后才有效；没建之前用 npm 包名，或下面的本地路径。）
 
-**Release 还没建/附件坏了时的兜底**：直接把仓库地址粘进安装框也行 ——
-`https://github.com/Astepluver/dsh-sci-viz`（DSH 会走 git 安装，公开仓库无需登录）。
+> **想装本地包时**：把 `dist/dsh-sci-viz-3.1.2.tgz` 的**绝对路径**贴进同一个安装框即可。
 
-**为什么要重启**：插件分两半，负责计算的那一半是 ESM 模块，Node 按 URL 缓存，
-改完只有重启才会重新加载；负责绘制的那一半每次刷新页面重新取。
+**没有网络 / 想手动装**：下载 `.zip` 解压，然后在**同一个安装框**里填解压出来的目录的
+**绝对路径**（例如 `C:\Users\你\Downloads\dsh-sci-viz`），或写成
+`link:C:/Users/你/Downloads/dsh-sci-viz`。**不要填 zip 文件本身的路径** —— 它不会被识别。
+
+手工等价做法（在 DSH 的 profile 目录里，通常是 `~/.dsh/profiles/desktop/`）：
+
+```jsonc
+// package.json
+"dependencies": { "dsh-sci-viz": "link:C:/path/to/dsh-sci-viz" },
+"dsh": { "profile": { "bundles": [ /* … */ "dsh-sci-viz" ] } }
+```
+
+```yaml
+# cordis.patch.yml —— 加这一条（位置不限，注意缩进）
+- id: sci-viz
+  disabled: false
+```
+
+**为什么要重启**：宿主半边是 ESM 模块，Node 按 URL 缓存；改完 `lib/index.js` 只有重启才会重新加载。
+浏览器半边（`lib/client.js`）每次刷新页面重新取，改前端刷新即可。
 
 **怎么确认装好了**：打开 `http://127.0.0.1:19387/api/sci-viz/health`，应当看到
-`skillRegistration.registered: 195` 与 `registry: { ours: 195, oursExpected: 195 }` ——
+`skillRegistration.registered: 226` 与 `registry: { ours: 226, oursExpected: 226 }` ——
 那是直接向 DSH 技能系统核对的结果，不是插件的自报数。
+（这两个数会随技能包重建而变，以 `/api/sci-viz/health` 当时的真实输出为准。）
 
 ---
+
+## 3.1.2 从 InkStone 引入 4 个医学技能（2026-10-27）
+
+从「书生·端砚 InkStone」（上海人工智能实验室）SCP 广场（`https://discovery.intern-ai.org.cn/scp`）
+筛选并导入了 4 个技能，正文**一字未改**，仅追加来源字段与署名段；四者均为 **InkVell Inc. / MIT**，
+自包含（代码内联、`uv pip install` 可装、不依赖任何远程 MCP 服务）：
+
+| 技能 | 补的是什么 | 分类 |
+|---|---|---|
+| `clinical-imaging` | 医学影像**定量**分析：扩散 MRI 的 ADC 图、微 CT 骨形态计量（BV/TV）、血流动力学参数、节律 cosinor、纤毛摆动频率 FFT、组织形变光流 | 统计与数据分析 |
+| `bioimage-analysis` | 显微图像：Cellpose/分水岭细胞分割、跨帧追踪（trackpy）、形态定量、克隆计数、共定位、骨架表征 | 统计与数据分析 |
+| `immunology-assays` | 免疫实验：ELISA 四参数 Logistic 拟合、免疫组化 H-score 定量、ATAC-seq 差异可及性、抗体滴度、细胞周期时长估计 | 统计与数据分析 |
+| `cancer-genomics-analysis` | 肿瘤基因组：体细胞突变（Mutect2）与注释、结构变异、拷贝数（CNVkit）、纯度/倍体、NMF 元基因、TMB | 测序与基因组流程 |
+
+**筛选口径与未导入的东西**（写清楚，免得以后误以为「抄了个大库」）：
+
+- 广场共 **1285** 个技能条目、**27** 个在线 SCP（MCP 工具服务）。其中 **111 个与本地技能库同源**（同一个公开技能集合，含 `histolab`/`pathml`/`pydicom`/`clinical-reports` 等）；
+  另有 **7 个是改名重传**（展示名 `dicom-image-processing` 的真名其实是 `pydicom`，`pathology-slide-analysis` 的真名是 `pathml`……），**按 frontmatter 真名判重才看得出来**。
+- 医学/生命科学相关候选 **225 个**，逐个取回正文后只留 4 个，其余不导入的理由分三类：
+  1. **许可不明**（多数只写「无」或 Unknown），不适合随插件再分发；
+  2. **依赖远程 MCP 服务**（`tooluniverse-*`、PJLab 的 `*_pipeline` 系列要靠 Origene/SciGraph 等 SCP 服务器，本地拿不到）；
+  3. **同类更弱**（如 `meta-analysis-execution` 仅 4.5 KB，且要调 SCP 工具，不如库里的 `statistical-analysis`）。
+
+> 关于「阅片」：这 4 个补的是**影像/切片的定量计算**，仍然**不是**临床诊断级的看图出结论。
+> 上一轮回答里说的边界没有变：能算、能读、能建模；不出诊断意见。
+
+## 3.1.1 修正了什么（2026-10-18）
+
+这一版不加功能，只把**已经过期的事实**改对 —— 起因是一次误报和一次差点丢数据的操作。
+
+1. **测试台 14 项误报**：技能包 2026-10-16 重建后技能数 195 → 222、分类 9 → 10，
+   但 `tools/smoke-host.mjs` 里当时写死了旧技能数（17 处），于是整个测试台变红。
+   现在技能数与分类数**从技能包推导**（`data/skill-pack.json.gz` 现读现算），重建技能包不再需要回来改测试。
+2. **构建脚本的两个真 bug**（`tools/build-skill-pack.mjs`）：
+   - `stats.contentBytes` 之前用 JS 字符串 `.length` 统计 —— 那是 UTF-16 码元数，比真实 UTF-8 字节
+     少 45,623 B（-1.62%），字段名却叫 `contentBytes`。已改为 `Buffer.byteLength`。
+   - `note` 里的附属资源体积写死「约 59 MB」。已改为**构建时实测**（把 `resources` 列出的每个文件
+     取实际大小求和，当前 2,489 个文件 / 约 47 MB）。
+3. **目录推导失误会静默写空包**：默认技能目录原本只按 `homedir()/.dsh/skills` 推导，在本机
+   （家目录本身是 `...\dsh`）指向一个不存在的路径，脚本**扫到 0 个技能却照常写出 1 KB 的空包**，
+   覆盖掉 222 个技能（靠备份救回）。现在多候选路径回退 + **技能数低于下限直接中止、不写文件**。
+4. 文档里所有过期数字（技能数 / 技能包体积 / 快照体积 / 附属资源体积 / 分类数 / health 示例输出）
+   一律换成实测值，并标注口径。
 
 ## 3.1.0 新增了什么
 
@@ -92,11 +156,11 @@
 |---|---|
 | 三维结构 | PDB/mmCIF 交互式查看：卡通 / 骨架 / 球棍 / 空间填充 / 仅配体；按链 / 二级结构 / B 因子 / 残基性质 / 元素 / 彩虹着色；**N 端（绿）/ C 端（紫）/ 指定位点（红）三类高亮**，都带标签；`focus` 聚焦把镜头推进到口袋并把远处结构淡出；拖拽旋转、滚轮缩放、Shift 拖拽平移、双击复位 |
 | 统计图表 | 正态分布曲线、t 分布拒绝域、F 分布、箱线图 + 抖动散点、直方图 + 正态拟合、Q-Q 图、效应量森林图、残差图、功效曲线；图下附统计表与一句话结论 |
-| 技能库 | **195 个技能随插件分发**（含完整 SKILL.md 正文，打包 0.85 MB），挂载时全部注册进 DSH 技能系统 —— 分享给别人，对方装上就能直接调用；面板里可检索、可按分类与来源筛选、可读正文 |
+| 技能库 | **226 个技能随插件分发**（含完整 SKILL.md 正文，打包 1.0 MB），挂载时全部注册进 DSH 技能系统 —— 分享给别人，对方装上就能直接调用；面板里可检索、可按分类与来源筛选、可读正文 |
 
-> **分享这件事**：`data/skill-pack.json.gz` 里是 195 个技能的完整正文，`apply()` 时通过
+> **分享这件事**：`data/skill-pack.json.gz` 里是 226 个技能的完整正文，`apply()` 时通过
 > `ctx.skills.register({ source: 'bundled', ... })` 逐个注册。所以对方**不需要**任何本地技能目录，
-> 装上插件技能就能用。附属资源（`scripts/` `references/`，源目录合计约 59 MB）没有打包，
+> 装上插件技能就能用。附属资源（`scripts/` `references/`，源目录合计约 47 MB（按包里 resources 字段逐个实测））没有打包，
 > 由 `tools/build-skill-pack.mjs` 把清单记在正文里。
 >
 > 早期版本用「即用层 / 技能库层」标注，那是原工作区目录结构的划分；现在技能全部随插件注册，
@@ -146,7 +210,7 @@
 
 | 来源 | 提供什么 | 是否必需 |
 |---|---|---|
-| 插件自带 `data/taxonomy.json` | 195 个技能的目录名、分类、中文说明、英文说明、标签、权重、层级 | **必需，已随插件打包** |
+| 插件自带 `data/taxonomy.json` | 226 个技能的目录名、分类、中文说明、英文说明、标签、权重、层级 | **必需，已随插件打包** |
 | 配置项 `skillsDirs` 指向的技能目录 | `SKILL.md` 正文、路径、体积、是否有 `scripts/` `references/` | 可选增强 |
 
 - **不配 `skillsDirs`**：技能库照常浏览，分类/搜索/标签全部可用；点开某条只显示快照说明。
@@ -279,7 +343,7 @@ dsh-sci-viz/
 │  └─ core/
 │     ├─ numeric.js        # 分布函数与统计检验（纯函数）
 │     └─ structure.js      # PDB/mmCIF 解析 + 结构几何编译
-├─ data/taxonomy.json      # 195 个技能的自包含快照（78 KB）
+├─ data/taxonomy.json      # 226 个技能的自包含快照（120 KB）
 ├─ 功能清单.md             # 完整功能说明（工具参数表由 tools/make-manifest.mjs 从代码生成）
 ├─ tools/                  # 验证与构建脚本（不参与运行时）
 │  ├─ verify-math.mjs/.py  # 数值内核对拍 scipy
@@ -301,11 +365,13 @@ dsh-sci-viz/
 
 | 部分 | 大小 |
 |---|---|
-| `lib/index.js` + `lib/core/*` | 约 124 KB |
-| `lib/client.js` | 约 100 KB |
-| `data/taxonomy.json`（195 技能快照） | 78 KB |
-| `tools/*`（验证/构建，可不随插件走） | 约 60 KB |
-| **运行时合计** | **约 250 KB** |
+| `lib/index.js` + `lib/core/*` | 约 210 KB |
+| `lib/client.js` | 约 223 KB |
+| `lib/verify-protocol.js` | 约 15 KB |
+| `data/taxonomy.json`（226 技能快照） | 120 KB |
+| `data/skill-pack.json.gz`（226 个技能的正文） | 约 1.0 MB |
+| `tools/*`（验证/构建，可不随插件走） | 约 215 KB |
+| **运行时合计** | **约 568 KB（不含技能包）/ 约 1.55 MB（含技能包）** |
 | `state/current.json` | 随当前文档变化（结构几十~几百 KB，图表 10–30 KB，只有一个文件、每次覆盖） |
 
 `.tmp/` 是验证脚本的中间产物（约 10 MB），脚本默认用完即删；`--keep` 才保留。

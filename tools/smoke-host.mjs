@@ -12,7 +12,51 @@
  */
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { gunzipSync } from 'node:zlib'
+
+const TOOLS_DIR = dirname(fileURLToPath(import.meta.url))
+const PACK_PATH = join(TOOLS_DIR, '..', 'data', 'skill-pack.json.gz')
+
+/**
+ * 技能数从技能包自己推导，**不写死**。
+ *
+ * 以前这里写的是 195，技能包重建过一次（2026-10-15 加入 14 个 WGS 技能之后，
+ * 技能库 195 → 222）就整个测试台红掉 —— 正是本文件后面那条注释警告过的事：
+ * 「写死 195 会让这个测试在任何人加过技能之后误报」。
+ * 现在改成：包里说多少，就按多少断言。这样「注册数 = 包内条数」这个契约照样被验证，
+ * 但重建技能包不再需要回来改测试。
+ */
+function readPackMeta() {
+  if (!existsSync(PACK_PATH)) {
+    throw new Error(`找不到技能包：${PACK_PATH}\n（这些断言必须对着真实技能包跑，不能靠猜）`)
+  }
+  const pack = JSON.parse(gunzipSync(readFileSync(PACK_PATH)).toString('utf8'))
+  const names = (pack.skills || []).map((s) => s.name)
+  return {
+    total: names.length,
+    categories: (pack.categories || []).length,
+    generatedAt: pack.generatedAt || '(未记录)',
+    statsDeclared: pack.stats?.skills ?? null,
+    uniqueNames: new Set(names).size,
+  }
+}
+const PACK = readPackMeta()
+const SKILL_TOTAL = PACK.total
+const SKILL_CATEGORIES = PACK.categories
+
+/** 派生值自检：包内元数据不自洽就直接报错，而不是让下游断言给出误导性的红。 */
+if (PACK.statsDeclared !== null && PACK.statsDeclared !== PACK.total) {
+  throw new Error(`技能包自相矛盾：stats.skills = ${PACK.statsDeclared}，但 skills 数组有 ${PACK.total} 条`)
+}
+if (PACK.uniqueNames !== PACK.total) {
+  throw new Error(`技能包里有重名技能：${PACK.total} 条里有 ${PACK.uniqueNames} 个不同名字`)
+}
+if (PACK.total < 200) {
+  throw new Error(`技能包只解出 ${PACK.total} 条，明显不对（构建于 ${PACK.generatedAt}）——先查包，再查测试`)
+}
+console.log(`技能包：${SKILL_TOTAL} 个技能 · ${SKILL_CATEGORIES} 个分类 · 构建于 ${PACK.generatedAt}`)
 
 const sandbox = mkdtempSync(join(tmpdir(), 'sciviz-smoke-'))
 
@@ -259,19 +303,33 @@ for (const [name, def] of A.tools) {
   ok(typeof def.description === 'string' && def.description.length > 20, `${name} 有描述`)
 }
 
+// ---- 描述本身不能是过期数字：这条是 2026-10-18 那次「描述里印着 195、分类少一个」的回归哨 ----
+{
+  const t = A.tools.get('sci_viz_skills')
+  if (typeof t?.whenReady === 'function') await t.whenReady()
+  const desc = String(t?.description ?? '')
+  const catDesc = String(t?.parameters?.properties?.category?.description ?? '')
+  // 关键：描述里的数字必须是**当前**技能包的条数，不是某个历史值
+  ok(desc.includes(String(SKILL_TOTAL)), `sci_viz_skills 描述里的条数是当前的 ${SKILL_TOTAL}`)
+  ok(/wgs/.test(catDesc), 'category 参数描述列出了全部分类（含 wgs）')
+  // 反面哨：任何 retired 的历史数字出现在描述里都算失败（195 是上一版技能数）
+  ok(!/\b195\b/.test(desc) && !/\b195\b/.test(catDesc), '描述里没有残留的历史技能数（195）')
+}
+
 console.log('\n== 便携模式的技能清单 ==')
 {
   const skills = await A.callRoute('/api/sci-viz/skills')
   ok(skills.json.ok, '/skills 可用')
-  ok(skills.json.skills.length === 195, `返回 ${skills.json.skills.length} 个技能（来自插件自带的包）`)
+  ok(skills.json.skills.length === SKILL_TOTAL, `返回 ${skills.json.skills.length} 个技能（来自插件自带的包）`)
   ok(skills.json.portable === true, 'portable = true（没有任何本地技能目录）')
-  ok(skills.json.counts.bundled === 195, `counts.bundled = ${skills.json.counts.bundled}（全部来自包）`)
-  ok(skills.json.counts.readable === 195, `counts.readable = ${skills.json.counts.readable}（正文都可读）`)
-  ok(skills.json.categories.length === 9, `${skills.json.categories.length} 个分类（分类表也在包里）`)
+  ok(skills.json.counts.bundled === SKILL_TOTAL, `counts.bundled = ${skills.json.counts.bundled}（全部来自包）`)
+  ok(skills.json.counts.readable === SKILL_TOTAL, `counts.readable = ${skills.json.counts.readable}（正文都可读）`)
+  ok(skills.json.categories.length === SKILL_CATEGORIES,
+    `${skills.json.categories.length} 个分类（分类表也在包里，包里有 ${SKILL_CATEGORIES} 个）`)
   const withZh = skills.json.skills.filter((s) => s.zh).length
   const withDesc = skills.json.skills.filter((s) => s.desc).length
-  ok(withZh === 195, `中文说明 ${withZh}/195`)
-  ok(withDesc === 195, `英文说明 ${withDesc}/195`)
+  ok(withZh === SKILL_TOTAL, `中文说明 ${withZh}/${SKILL_TOTAL}`)
+  ok(withDesc === SKILL_TOTAL, `英文说明 ${withDesc}/${SKILL_TOTAL}`)
 
   // 正文：没有本地目录也必须能读到
   const one = await A.callRoute('/api/sci-viz/skill?id=pymol&layer=bundled')
@@ -287,7 +345,7 @@ console.log('\n== 分享出去就能用：技能是否真的注册进了 DSH =='
   // 等注册的异步链跑完
   await new Promise((r) => setTimeout(r, 900))
   const reg = A.registered
-  ok(reg.length === 195, `注册了 ${reg.length} 个技能到 DSH 技能系统`)
+  ok(reg.length === SKILL_TOTAL, `注册了 ${reg.length} 个技能到 DSH 技能系统`)
 
   const sample = reg.find((s) => s.name === 'pymol')
   ok(!!sample, '按 kebab-case 名字注册（pymol）')
@@ -307,13 +365,13 @@ console.log('\n== 分享出去就能用：技能是否真的注册进了 DSH =='
   ok(noContent.length === 0, `每个技能都带正文（空正文 ${noContent.length} 个）`)
 
   const h = await A.callRoute('/api/sci-viz/health')
-  ok(h.json.skillRegistration && h.json.skillRegistration.registered === 195,
+  ok(h.json.skillRegistration && h.json.skillRegistration.registered === SKILL_TOTAL,
     `/health 报告注册数 ${h.json.skillRegistration?.registered}`)
   // 可自证：技能系统自己被问一遍，认得多少个来自本插件的技能
   const probe = h.json.skillRegistration?.registry
-  ok(probe && probe.bundled === 195, `技能系统自查：${probe?.bundled} 个 source='bundled'，共 ${probe?.total} 条`)
+  ok(probe && probe.bundled === SKILL_TOTAL, `技能系统自查：${probe?.bundled} 个 source='bundled'，共 ${probe?.total} 条`)
   // 按名字核对：这个字段曾经按 provider 过滤，而 DSH 不填插件名，结果永远是 0
-  ok(probe && probe.ours === 195 && probe.oursExpected === 195,
+  ok(probe && probe.ours === SKILL_TOTAL && probe.oursExpected === SKILL_TOTAL,
     `按名字核对：${probe?.ours}/${probe?.oursExpected} 个注册的技能确实在技能表里`)
   ok(!h.json.skillRegistration?.reason, `没有降级原因（${h.json.skillRegistration?.reason ?? '无'}）`)
 }
@@ -325,7 +383,7 @@ console.log('\n== 分享出去就能用：技能是否真的注册进了 DSH =='
   apply(D.ctx, { stateDir: join(sandbox, 'state-d') })
   await new Promise((r) => setTimeout(r, 700))
   const h = await D.callRoute('/api/sci-viz/health')
-  ok(h.json.ok && h.json.skills.total === 195, '没有 skills 服务时面板清单照常（195 个）')
+  ok(h.json.ok && h.json.skills.total === SKILL_TOTAL, '没有 skills 服务时面板清单照常（${SKILL_TOTAL} 个）')
   ok(/skills 服务不可用/.test(h.json.skillRegistration?.reason ?? ''),
     `/health 如实说明：${h.json.skillRegistration?.reason}`)
 }
@@ -348,15 +406,17 @@ ok(B.routes.size === 12 && B.tools.size === 5, `工具与路由照常注册（${
    * 这里不能写死总数：本机的技能目录里可能有插件包里没有的技能（用户自己加的、
    * 或 DSH 自带的插件开发技能），那正是「本地目录补充技能」这个功能在生效 ——
    * 实测本机就有 11 个额外技能（plugin-write / plugin-release / dsh-upgrade-audit …）。
-   * 写死 195 会让这个测试在任何人加过技能之后误报。
+   * 写死总数会让这个测试在任何人加过技能之后误报 —— 修过一次了：
+   * 2026-10-15 技能包从 195 涨到 222，这里原本写死的 195 让整个测试台红了 14 项。
+   * 现在用文件顶部从技能包里推导出来的 SKILL_TOTAL。
    */
-  ok(bundled === 195, `包内技能仍是 ${bundled} 个（不因本机有目录而重复或丢失）`)
-  ok(total === 195 + local, `总数 ${total} = 包内 195 + 本地 ${local}（本机目录里多出来的都列出来了）`)
+  ok(bundled === SKILL_TOTAL, `包内技能仍是 ${bundled} 个（不因本机有目录而重复或丢失）`)
+  ok(total === SKILL_TOTAL + local, `总数 ${total} = 包内 ${SKILL_TOTAL} + 本地 ${local}（本机目录里多出来的都列出来了）`)
   ok(skills.json.counts.readable === total, `readable = ${skills.json.counts.readable}/${total}（全部可读）`)
   // 本机有目录时，包内技能应当记下 localPath，详情才能读到 scripts/references
   if (local > 0) {
     const withLocal = skills.json.skills.filter((s) => s.layer === 'bundled' && s.localPath)
-    ok(withLocal.length === 195, `包内 ${withLocal.length}/195 关联到了本地资源目录`)
+    ok(withLocal.length === SKILL_TOTAL, `包内 ${withLocal.length}/${SKILL_TOTAL} 关联到了本地资源目录`)
   } else {
     skip('包内技能关联本地资源目录', `本机没有配置里的技能目录（${LOCAL_SKILL_DIRS.length} 个命中）`)
   }
@@ -623,7 +683,7 @@ console.log('\n== 路由 ==')
 
   const h1 = await A.callRoute('/api/sci-viz/health')
   ok(h1.json.ok && h1.json.clientSeenAt === 0 && h1.json.clientAlive === false, '/health 初始为「客户端未报到」')
-  ok(h1.json.skills && h1.json.skills.total === 195, `/health 报告技能数 ${h1.json.skills?.total}`)
+  ok(h1.json.skills && h1.json.skills.total === SKILL_TOTAL, `/health 报告技能数 ${h1.json.skills?.total}`)
   await A.callRoute('/api/sci-viz/hello?v=smoke')
   const h2 = await A.callRoute('/api/sci-viz/health')
   ok(h2.json.clientAlive === true && h2.json.clientHits === 1, '报到后 clientAlive=true')
